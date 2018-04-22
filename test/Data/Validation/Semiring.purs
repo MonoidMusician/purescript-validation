@@ -5,7 +5,7 @@ import Prelude
 import Control.Alt (class Alt, (<|>))
 import Control.Alternative (class Alternative, class Plus)
 import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE, logShow)
+import Control.Monad.Eff.Console (CONSOLE, log, logShow)
 import Control.Monad.Eff.Exception (EXCEPTION)
 import Control.Monad.Eff.Random (RANDOM)
 import Control.Monad.Gen (choose)
@@ -30,11 +30,42 @@ derive newtype instance altV :: Semiring e => Alt (V e)
 derive newtype instance plusV :: Semiring e => Plus (V e)
 derive newtype instance alternativeV :: Semiring e => Alternative (V e)
 
-instance arbitraryWrapped :: (Semiring e, Arbitrary e, Arbitrary a) =>
+instance arbitraryV :: (Semiring e, Arbitrary e, Arbitrary a) =>
   Arbitrary (V e a) where
     arbitrary = V <$> choose
       (V.invalid <$> resize 3 QC.arbitrary)
       (pure <$> QC.arbitrary)
+
+data V2 e a = V1 e | V2 e a
+derive instance eqV2 :: (Eq e, Eq a) => Eq (V2 e a)
+derive instance functorV2 :: Functor (V2 e)
+instance bifunctorV2 :: Bifunctor V2 where
+  bimap f _ (V1 e) = V1 (f e)
+  bimap f g (V2 e a) = V2 (f e) (g a)
+instance applyV2 :: Semiring e => Apply (V2 e) where
+  apply (V1 e1) (V1 e2) = V1 (e1 * e2)
+  apply (V1 e1) (V2 e2 _) = V1 (e1 * e2)
+  apply (V2 e1 _) (V1 e2) = V1 (e1 * e2)
+  apply (V2 e1 fa) (V2 e2 a) = V2 (e1 * e2) (fa a)
+instance applicativeV2 :: Semiring e => Applicative (V2 e) where
+  pure = V2 one
+instance altV2 :: Semiring e => Alt (V2 e) where
+  alt (V1 e1) (V1 e2) = V1 (e1 + e2)
+  alt (V1 e1) (V2 e2 a) = V2 (e1 + e2) a
+  alt (V2 e1 a) (V1 e2) = V2 (e1 + e2) a
+  alt (V2 e1 a) (V2 e2 _) = V2 (e1 + e2) a
+instance plusV2 :: Semiring e => Plus (V2 e) where
+  empty = V1 zero
+instance showV2 :: (Show e, Show a) => Show (V2 e a) where
+  show (V1 e) = "(V1 " <> show e <> ")"
+  show (V2 e a) = "(V2 " <> show e <> " " <> show a <> ")"
+instance alternativeV2 :: Semiring e => Alternative (V2 e)
+
+instance arbitraryV2 :: (Arbitrary e, Arbitrary a) =>
+  Arbitrary (V2 e a) where
+    arbitrary = choose
+      (V1 <$> QC.arbitrary)
+      (V2 <$> QC.arbitrary <*> QC.arbitrary)
 
 distR :: forall f a b. Alternative f => f (a -> b) -> f (a -> b) -> f a -> f b
 distR f g x = (f <|> g) <*> x
@@ -70,6 +101,7 @@ distL' (V f) (V g) (V x) = V case x of
 main :: forall e. Eff ( console :: CONSOLE, exception :: EXCEPTION, random :: RANDOM | e ) Unit
 main = do
   let vInt = Proxy2 :: Proxy2 (V Int)
+  let v2Int = Proxy2 :: Proxy2 (V2 Int)
   let logErroring v = logShow (V v :: V Int Unit)
   QCLC.checkApply vInt
   QCLC.checkApplicative vInt
@@ -88,8 +120,16 @@ main = do
   let ppu = pure (pure unit)
   logErroring $ (ppu <|> ppu) <*> V.invalid 2
   logErroring $ (ppu <*> V.invalid 2) <|> (ppu <*> V.invalid 2)
+
   let
     distributivity :: V Int (Ordering -> Ordering) -> V Int (Ordering -> Ordering) -> V Int Ordering -> QC.Result
     distributivity f g x = ((f <|> g) <*> x) === ((f <*> x) <|> (g <*> x))
   --QC.quickCheck' 1000 distributivity
   pure unit
+
+  log "---------- V2 -----------"
+  QCLC.checkApply v2Int
+  QCLC.checkApplicative v2Int
+  QCLC.checkAlt v2Int
+  QCLC.checkPlus v2Int
+  QCLC.checkAlternative v2Int
