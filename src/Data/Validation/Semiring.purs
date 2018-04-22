@@ -5,7 +5,7 @@
 -- | The API is equivalent to `Data.Validation`,
 -- | but uses `Semiring` instead of `Semigroup`.
 module Data.Validation.Semiring
-  ( V
+  ( V(..)
   , unV
   , invalid
   , isValid

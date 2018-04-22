@@ -20,5 +20,8 @@
     "purescript-bifunctors": "^3.0.0",
     "purescript-monoid": "^3.0.0",
     "purescript-foldable-traversable": "^3.6.1"
+  },
+  "devDependencies": {
+    "purescript-quickcheck-laws": "^3.0.1"
   }
 }
